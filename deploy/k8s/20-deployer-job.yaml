@@ -1,0 +1,35 @@
+# One-shot Job that deploys the contracts on-chain. Contract addresses are
+# deterministic (CREATE2 + fixed salts), so the address book is shipped as the
+# `deployment-addresses` ConfigMap — this Job only needs to put the code on-chain.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: deployer
+  namespace: besu-interbank
+  labels: { app: deployer }
+spec:
+  backoffLimit: 6
+  template:
+    metadata:
+      labels: { app: deployer }
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-besu
+          image: curlimages/curl:8.11.0
+          command:
+            - sh
+            - -c
+            - |
+              echo "waiting for Besu RPC…"
+              until curl -sf -X POST -H 'content-type: application/json' \
+                --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' \
+                http://besu:8545 | grep -q result; do sleep 2; done
+              echo "besu up"
+      containers:
+        - name: deployer
+          image: besu-interbank-deployer:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - { name: RPC_URL, value: http://besu:8545 }
+            - { name: DEPLOYMENT_OUT, value: /tmp/besu.json }

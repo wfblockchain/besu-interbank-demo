@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Besu Interbank Console</title>
+<style>
+  :root{
+    --wf-red:#D71E28; --wf-red-dark:#A8161D; --wf-gold:#FFCD00; --wf-gold-dark:#C9A200;
+    --bg:#F4F4F5; --card:#FFFFFF; --card-2:#F5F6F7; --tertiary:#EDEEF0;
+    --txt:#1A1A1A; --txt-2:#4A4A4A; --muted:#6E6E6E; --faint:#9AA0A6;
+    --line:#E3E4E8; --line-2:#D3D5DA; --shadow:0 2px 8px rgba(0,0,0,.08);
+    /* Bank A = Wells Fargo red · Bank B = Wells Fargo gold */
+    --a:#D71E28; --a-dim:rgba(215,30,40,.10);
+    --b:#C9A200; --b-dim:rgba(201,162,0,.16); --b-fill:#FFCD00;
+    --chain:#6E6E6E; --coin:#2E7D32; --good:#2E7D32; --bad:#D71E28; --warn:#C9A200;
+    --mono:ui-monospace,"SF Mono",SFMono-Regular,"JetBrains Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font-family:var(--sans);line-height:1.5;-webkit-font-smoothing:antialiased;}
+
+  /* Wells Fargo header banner */
+  .wfhead{background:linear-gradient(135deg,var(--wf-red) 0%,var(--wf-red-dark) 100%);
+    border-bottom:3px solid var(--wf-gold);box-shadow:0 2px 12px rgba(0,0,0,.15);position:sticky;top:0;z-index:100;}
+  .wfhead-in{max-width:1180px;margin:0 auto;padding:15px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;}
+  .brand{display:flex;align-items:center;gap:12px;}
+  .coach{width:34px;height:34px;border-radius:7px;background:var(--wf-gold);display:grid;place-items:center;font-size:18px;flex-shrink:0;}
+  h1{font-size:19px;margin:0;font-weight:650;color:#fff;letter-spacing:-.01em;}
+  .sub{font-family:var(--mono);font-size:11px;color:rgba(255,255,255,.85);margin-top:2px;}
+  .chip{font-family:var(--mono);font-size:11px;color:#1A1A1A;background:var(--wf-gold);border-radius:5px;
+    padding:5px 11px;display:inline-flex;gap:8px;align-items:center;font-weight:600;}
+  .chip .live{width:7px;height:7px;border-radius:50%;background:var(--wf-red);box-shadow:0 0 0 0 var(--wf-red);animation:pulse 2s infinite;}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(215,30,40,.5)}70%{box-shadow:0 0 0 6px transparent}100%{box-shadow:0 0 0 0 transparent}}
+
+  .wrap{max-width:1180px;margin:0 auto;padding:22px;}
+  .grid{display:grid;grid-template-columns:1.35fr 1fr;gap:16px;}
+  @media(max-width:900px){.grid{grid-template-columns:1fr;}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;box-shadow:var(--shadow);}
+  .card h2{margin:0 0 12px;font-size:12px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);}
+
+  .controls{display:flex;flex-direction:column;gap:12px;}
+  .action{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .action .desc{flex:1;min-width:130px;font-size:13px;color:var(--txt-2);}
+  input[type=number]{width:120px;font-family:var(--mono);font-size:13px;background:var(--card);color:var(--txt);
+    border:1px solid var(--line-2);border-radius:7px;padding:7px 10px;}
+  button{font-family:var(--sans);font-size:13px;font-weight:600;border-radius:7px;padding:9px 16px;cursor:pointer;
+    border:1px solid var(--line-2);background:var(--card);color:var(--txt);transition:.15s;white-space:nowrap;}
+  button:hover:not(:disabled){border-color:var(--faint);box-shadow:var(--shadow);}
+  button:disabled{opacity:.5;cursor:not-allowed;}
+  button.a{background:var(--wf-red);border-color:var(--wf-red);color:#fff;} button.a:hover:not(:disabled){background:var(--wf-red-dark);}
+  button.b{background:var(--wf-gold);border-color:var(--wf-gold-dark);color:#1A1A1A;} button.b:hover:not(:disabled){background:var(--wf-gold-dark);}
+  button.ghost{color:var(--txt-2);}
+  .status{font-family:var(--mono);font-size:12px;min-height:18px;color:var(--muted);border-top:1px solid var(--line);padding-top:10px;}
+  .status .ok{color:var(--good);} .status .err{color:var(--bad);} .status .work{color:var(--wf-gold-dark);}
+
+  .tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px;}
+  .tile{background:var(--card-2);border:1px solid var(--line);border-radius:9px;padding:11px 13px;}
+  .tile .l{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);}
+  .tile .v{font-family:var(--mono);font-size:18px;font-weight:700;color:var(--txt);margin-top:3px;font-variant-numeric:tabular-nums;}
+  .tile.b{border-left:3px solid var(--wf-gold);} .tile.b .l{color:var(--wf-gold-dark);} .tile .u{font-size:11px;color:var(--muted);font-weight:400;}
+
+  svg.stage{display:block;width:100%;height:auto;}
+  .contract-name{font-family:var(--mono);font-size:13px;fill:var(--txt);font-weight:600;}
+  .contract-sub{font-size:9.5px;fill:var(--muted);}
+  .node-sub{font-family:var(--mono);font-size:10px;fill:var(--muted);}
+  .node-strong{font-family:var(--mono);font-size:10px;fill:var(--txt);}
+  .dom-label{font-family:var(--mono);font-size:11px;letter-spacing:.05em;text-transform:uppercase;font-weight:600;}
+  .bal{font-family:var(--mono);font-weight:700;fill:var(--txt);font-variant-numeric:tabular-nums;}
+  .bal-label{font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;}
+  .keycap{font-family:var(--mono);font-size:11px;font-weight:700;}
+  /* darker stroke so the flow paths read on the white card */
+  .flowpath{fill:none;stroke:#9AA1AC;stroke-width:1.8;stroke-dasharray:5 4;}
+  .packet{opacity:0;}
+
+  .explorer{margin-top:16px;}
+  .expgrid{display:grid;grid-template-columns:1fr 300px;gap:16px;}
+  @media(max-width:900px){.expgrid{grid-template-columns:1fr;}}
+  .feed{max-height:340px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;}
+  .tx{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;background:var(--card-2);
+    border:1px solid var(--line);border-radius:8px;padding:8px 11px;font-family:var(--mono);font-size:12px;cursor:pointer;transition:.12s;}
+  .tx:hover{border-color:var(--faint);box-shadow:var(--shadow);}
+  .tx .m{font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:5px;white-space:nowrap;}
+  .m.mint{color:var(--wf-red);background:var(--a-dim);} .m.transfer{color:var(--wf-gold-dark);background:var(--b-dim);}
+  .m.authorize{color:var(--txt-2);background:var(--tertiary);} .m.other{color:var(--muted);background:var(--tertiary);}
+  .tx .route{color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .tx .route .arr{color:var(--faint);}
+  .tx .st{width:8px;height:8px;border-radius:50%;}
+  .st.success{background:var(--good);} .st.reverted{background:var(--bad);} .st.pending{background:var(--warn);}
+  .blocks{display:flex;flex-direction:column;gap:6px;max-height:340px;overflow-y:auto;}
+  .blk{display:flex;justify-content:space-between;align-items:center;background:var(--card-2);border:1px solid var(--line);
+    border-radius:8px;padding:8px 11px;font-family:var(--mono);font-size:12px;}
+  .blk .n{color:var(--txt);} .blk .c{color:var(--muted);font-size:11px;} .blk .c b{color:var(--wf-red);}
+  .empty{font-family:var(--mono);font-size:12px;color:var(--faint);padding:14px;text-align:center;}
+
+  .modal{position:fixed;inset:0;background:rgba(26,26,26,.5);display:none;align-items:flex-start;justify-content:center;padding:32px 20px;z-index:200;overflow-y:auto;}
+  .modal.open{display:flex;}
+  .modal .box{background:var(--card);border:1px solid var(--line-2);border-radius:12px;max-width:720px;width:100%;padding:22px;box-shadow:0 12px 40px rgba(0,0,0,.2);}
+  .modal h3{margin:0 0 4px;font-size:15px;color:var(--txt);font-weight:650;}
+  .modal .x{float:right;cursor:pointer;color:var(--muted);border:none;background:none;font-size:18px;line-height:1;}
+  .sec{margin-top:18px;} .sec:first-of-type{margin-top:12px;}
+  .sec-h{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
+    border-bottom:1px solid var(--line);padding-bottom:6px;margin-bottom:10px;}
+  .kv{display:grid;grid-template-columns:150px 1fr;gap:8px 14px;font-family:var(--mono);font-size:12px;}
+  .kv .k{color:var(--muted);} .kv .val{color:var(--txt);word-break:break-all;}
+  .kv .val .lbl{display:inline-block;background:var(--a-dim);color:var(--wf-red);border-radius:4px;padding:1px 6px;margin-right:6px;font-weight:600;}
+  .kv .val .addr{color:var(--muted);}
+  .pill{display:inline-block;font-family:var(--mono);font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px;}
+  .pill.success{background:rgba(46,125,50,.14);color:var(--good);} .pill.reverted{background:var(--a-dim);color:var(--bad);}
+  .pill.pending{background:var(--b-dim);color:var(--wf-gold-dark);}
+  .params{display:flex;flex-direction:column;gap:6px;}
+  .prow{display:grid;grid-template-columns:150px auto 1fr;gap:10px;align-items:baseline;font-family:var(--mono);font-size:12px;
+    background:var(--card-2);border:1px solid var(--line);border-radius:7px;padding:7px 10px;}
+  .prow .pn{color:var(--txt);font-weight:600;} .prow .pt{color:var(--faint);font-size:10.5px;}
+  .prow .pv{color:var(--txt-2);word-break:break-all;} .prow .pv .human{color:var(--wf-gold-dark);font-weight:600;}
+  .prow .pv .lbl{background:var(--tertiary);color:var(--txt);border-radius:4px;padding:1px 6px;margin-right:6px;}
+  .logrow{background:var(--card-2);border:1px solid var(--line);border-left:3px solid var(--wf-gold);border-radius:7px;padding:9px 11px;margin-bottom:8px;}
+  .logrow .lh{font-family:var(--mono);font-size:12px;color:var(--txt);font-weight:600;margin-bottom:6px;}
+  .logrow .lh .ev{color:var(--wf-red);} .logrow .lh .at{color:var(--muted);font-weight:400;}
+  .inputraw{font-family:var(--mono);font-size:11px;color:var(--muted);background:var(--card-2);border:1px solid var(--line);
+    border-radius:7px;padding:9px 11px;word-break:break-all;max-height:96px;overflow-y:auto;}
+</style>
+</head>
+<body>
+<header class="wfhead"><div class="wfhead-in">
+  <div class="brand">
+    <div class="coach">🏦</div>
+    <div><h1>Besu Interbank Console</h1><div class="sub" id="tokenline">deposit token · loading…</div></div>
+  </div>
+  <div class="chip"><span class="live"></span><span id="blockchip">block —</span></div>
+</div></header>
+
+<div class="wrap">
+  <div class="grid">
+    <!-- FLOW -->
+    <div class="card">
+      <h2>Live flow</h2>
+      <svg class="stage" viewBox="0 0 1000 470" role="img" aria-label="Interbank flow">
+        <defs>
+          <filter id="glowA" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="4" result="x"/><feMerge><feMergeNode in="x"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          <filter id="glowB" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="4" result="x"/><feMerge><feMergeNode in="x"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          <marker id="arw" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10z" fill="#8A9099"/></marker>
+        </defs>
+        <path id="pA_tx"  class="flowpath" d="M250,250 C320,235 330,120 388,118" marker-end="url(#arw)"/>
+        <path id="pS1"    class="flowpath" d="M500,146 L500,166" marker-end="url(#arw)"/>
+        <path id="pS2"    class="flowpath" d="M500,214 L500,234" marker-end="url(#arw)"/>
+        <path id="pMint"  class="flowpath" d="M500,282 L500,318" marker-end="url(#arw)"/>
+        <path id="pB_tx"  class="flowpath" d="M750,250 C680,250 660,270 612,270" marker-end="url(#arw)"/>
+        <path id="pXfer"  class="flowpath" d="M500,390 L500,414" marker-end="url(#arw)"/>
+
+        <!-- Bank A (WF red) -->
+        <rect x="24" y="70" width="250" height="360" rx="12" fill="var(--a-dim)" stroke="var(--a)" stroke-opacity=".45" stroke-dasharray="6 5"/>
+        <text x="42" y="96" class="dom-label" fill="var(--a)">🔒 Bank A · Issuer</text>
+        <g id="svcA"><rect x="48" y="120" width="202" height="60" rx="8" fill="var(--card-2)" stroke="var(--line-2)"/>
+          <text x="62" y="144" class="node-sub">DEPOSIT-SVC</text><text x="62" y="164" class="node-strong">builds mint · sighash</text></g>
+        <g id="routerA"><rect x="48" y="212" width="202" height="72" rx="8" fill="var(--card-2)" stroke="var(--line-2)"/>
+          <text x="62" y="236" class="node-sub">SIGNING-ROUTER</text>
+          <circle id="haloA" cx="80" cy="262" r="13" fill="var(--a)" opacity="0"/><text x="80" y="268" font-size="18" text-anchor="middle">🔐</text>
+          <text x="104" y="266" class="keycap" fill="var(--a)">KEY A</text></g>
+
+        <!-- Bank B (WF gold) -->
+        <rect x="726" y="70" width="250" height="360" rx="12" fill="var(--b-dim)" stroke="var(--b)" stroke-opacity=".55" stroke-dasharray="6 5"/>
+        <text x="806" y="96" class="dom-label" fill="var(--b)">🔒 Bank B · Holder</text>
+        <g id="svcB"><rect x="750" y="120" width="202" height="60" rx="8" fill="var(--card-2)" stroke="var(--line-2)"/>
+          <text x="764" y="144" class="node-sub">DEPOSIT-SVC</text><text x="764" y="164" class="node-strong">builds transfer · sighash</text></g>
+        <g id="routerB"><rect x="750" y="212" width="202" height="72" rx="8" fill="var(--card-2)" stroke="var(--line-2)"/>
+          <text x="764" y="236" class="node-sub">SIGNING-ROUTER</text>
+          <circle id="haloB" cx="920" cy="262" r="13" fill="var(--b-fill)" opacity="0"/><text x="920" y="268" font-size="18" text-anchor="middle">🔐</text>
+          <text x="800" y="266" class="keycap" fill="var(--b)">KEY B</text></g>
+
+        <!-- chain -->
+        <text x="500" y="92" text-anchor="middle" class="dom-label" fill="var(--chain)">Hyperledger Besu · QBFT</text>
+        <g id="cTA"><rect x="390" y="98" width="220" height="48" rx="7" fill="var(--card-2)" stroke="var(--line-2)"/>
+          <text x="500" y="120" text-anchor="middle" class="contract-name">TokenAuthority</text><text x="500" y="136" text-anchor="middle" class="contract-sub">rate-limited mint</text></g>
+        <g id="cRL"><rect x="390" y="166" width="220" height="48" rx="7" fill="var(--card-2)" stroke="var(--line-2)"/>
+          <text x="500" y="188" text-anchor="middle" class="contract-name">ReserveLedger</text><text x="500" y="204" text-anchor="middle" class="contract-sub">issuer backing</text></g>
+        <g id="cSC"><rect x="390" y="234" width="220" height="48" rx="7" fill="var(--card-2)" stroke="var(--line-2)"/>
+          <text x="500" y="256" text-anchor="middle" class="contract-name" id="scName">Deposit Token</text><text x="500" y="272" text-anchor="middle" class="contract-sub">ERC-20</text></g>
+        <g id="wallet"><rect x="390" y="318" width="220" height="64" rx="8" fill="var(--b-dim)" stroke="var(--b)" stroke-opacity=".5" stroke-dasharray="5 4"/>
+          <text x="404" y="338" class="bal-label" fill="var(--wf-gold-dark)">Bank B wallet</text>
+          <text id="walletBal" x="404" y="368" class="bal" font-size="20">0</text><text x="596" y="368" text-anchor="end" class="node-sub" id="sym1">WFUSD</text></g>
+        <g id="merchant"><rect x="390" y="414" width="220" height="48" rx="7" fill="var(--card-2)" stroke="var(--line-2)"/>
+          <text x="404" y="433" class="bal-label" fill="var(--muted)">Merchant</text>
+          <text id="merchantBal" x="404" y="453" class="bal" font-size="16">0</text><text x="596" y="453" text-anchor="end" class="node-sub" id="sym2">WFUSD</text></g>
+
+        <circle id="pkA" class="packet" r="6" fill="var(--a)" filter="url(#glowA)"/>
+        <circle id="pkB" class="packet" r="6" fill="var(--b-fill)" filter="url(#glowB)"/>
+        <circle id="coin" class="packet" r="7" fill="var(--coin)" filter="url(#glowB)"/>
+      </svg>
+    </div>
+
+    <!-- CONTROLS + STATE -->
+    <div class="card">
+      <h2>Controls</h2>
+      <div class="controls">
+        <div class="action">
+          <span class="desc">Issuer onboards Bank B &amp; merchant (whitelist)</span>
+          <button class="a" id="btnAuth">Authorize</button>
+        </div>
+        <div class="action">
+          <span class="desc">Bank A mints to Bank B</span>
+          <input type="number" id="mintAmt" value="1000000" min="1" step="1000">
+          <button class="a" id="btnMint">Mint</button>
+        </div>
+        <div class="action">
+          <span class="desc">Bank B transfers to merchant</span>
+          <input type="number" id="xferAmt" value="250000" min="1" step="1000">
+          <button class="b" id="btnXfer">Transfer</button>
+        </div>
+        <div class="action" style="justify-content:flex-end;gap:8px">
+          <button class="ghost" id="btnRun">▶ Run full flow</button>
+        </div>
+        <div class="status" id="status">Ready.</div>
+      </div>
+
+      <h2 style="margin-top:18px">On-chain state</h2>
+      <div class="tiles">
+        <div class="tile b"><div class="l">Bank B wallet</div><div class="v"><span id="tBankB">0</span> <span class="u" id="u1">WFUSD</span></div></div>
+        <div class="tile"><div class="l">Merchant</div><div class="v"><span id="tMerch">0</span> <span class="u" id="u2">WFUSD</span></div></div>
+        <div class="tile"><div class="l">Token supply</div><div class="v"><span id="tSupply">0</span> <span class="u" id="u3">WFUSD</span></div></div>
+        <div class="tile"><div class="l">Reserve backing</div><div class="v"><span id="tBacking">0</span> <span class="u" id="u4">WFUSD</span></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EXPLORER -->
+  <div class="card explorer">
+    <h2>Block explorer <span style="color:var(--faint);text-transform:none;letter-spacing:0"> · live from Besu RPC</span></h2>
+    <div class="expgrid">
+      <div>
+        <div class="node-sub" style="margin-bottom:8px;font-family:var(--mono);color:var(--muted)">Transactions</div>
+        <div class="feed" id="feed"><div class="empty">Waiting for transactions…</div></div>
+      </div>
+      <div>
+        <div class="node-sub" style="margin-bottom:8px;font-family:var(--mono);color:var(--muted)">Recent blocks</div>
+        <div class="blocks" id="blocks"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="modal"><div class="box">
+  <button class="x" onclick="closeModal()">✕</button>
+  <h3 id="mTitle">Transaction</h3>
+  <div id="mBody"></div>
+</div></div>
+
+<script src="gsap.min.js"></script>
+<script src="MotionPathPlugin.min.js"></script>
+<script>
+const RED = "#D71E28", GOLD = "#C9A200";   // Wells Fargo flow colors
+let SYM = "WFUSD", ADDR = {}, busy = false;
+const $ = id => document.getElementById(id);
+const fmt = n => Math.round(Number(n)).toLocaleString("en-US");
+const toBase = whole => (BigInt(Math.round(Number(whole))) * 1000000n).toString();
+const fromBase = base => { try { return Number(BigInt(base) / 1000000n); } catch { return 0; } };
+
+async function api(path, method="GET", body){
+  const r = await fetch(path, {method, headers: body?{"content-type":"application/json"}:undefined, body: body?JSON.stringify(body):undefined});
+  const t = await r.text(); const d = t?JSON.parse(t):{};
+  if(!r.ok) throw new Error(d.error || r.status); return d;
+}
+function setStatus(msg, cls=""){ $("status").innerHTML = `<span class="${cls}">${msg}</span>`; }
+function setBusy(b){ busy=b; ["btnAuth","btnMint","btnXfer","btnRun"].forEach(id=>$(id).disabled=b); }
+
+async function refreshState(){
+  try{
+    const s = await api("/api/state");
+    SYM = s.token.symbol || "WFUSD"; ADDR = s.addresses;
+    $("tokenline").textContent = `${s.token.name} (${SYM}) · chainId 1337 · ${ADDR.depositToken}`;
+    $("blockchip").textContent = "block " + s.blockNumber;
+    $("scName").textContent = s.token.name || "Deposit Token";
+    [ "sym1","sym2","u1","u2","u3","u4" ].forEach(id=>$(id).textContent=SYM);
+    $("tBankB").textContent   = fmt(fromBase(s.balances.bankB));
+    $("tMerch").textContent   = fmt(fromBase(s.balances.merchant));
+    $("tSupply").textContent  = fmt(fromBase(s.token.totalSupply));
+    $("tBacking").textContent = fmt(fromBase(s.token.reserveLedgerSupply));
+    $("walletBal").textContent   = fmt(fromBase(s.balances.bankB));
+    $("merchantBal").textContent = fmt(fromBase(s.balances.merchant));
+  }catch(e){}
+}
+
+async function doAuthorize(){
+  if(busy) return; setBusy(true); setStatus("Bank A authorizing Bank B & merchant…","work");
+  try{
+    await api("/api/authorize","POST",{account:ADDR.bankB});
+    await api("/api/authorize","POST",{account:ADDR.merchant});
+    setStatus("✓ Counterparties authorized (whitelisted)","ok");
+  }catch(e){ setStatus("✗ "+e.message,"err"); }
+  await refreshState(); setBusy(false);
+}
+async function doMint(){
+  if(busy) return; setBusy(true);
+  const amt = $("mintAmt").value; setStatus(`Bank A minting ${fmt(amt)} ${SYM} → Bank B (signing with Key A)…`,"work");
+  try{
+    const r = await api("/api/mint","POST",{to:ADDR.bankB, amount:toBase(amt)});
+    setStatus(`✓ Minted — tx ${r.txHash.slice(0,18)}… signed by ${r.signedBy.slice(0,10)}…`,"ok");
+    playMint();
+  }catch(e){ setStatus("✗ "+e.message,"err"); }
+  await refreshState(); setBusy(false);
+}
+async function doTransfer(){
+  if(busy) return; setBusy(true);
+  const amt = $("xferAmt").value; setStatus(`Bank B transferring ${fmt(amt)} ${SYM} → merchant (signing with Key B)…`,"work");
+  try{
+    const r = await api("/api/transfer","POST",{to:ADDR.merchant, amount:toBase(amt)});
+    setStatus(`✓ Transferred — tx ${r.txHash.slice(0,18)}… signed by ${r.signedBy.slice(0,10)}…`,"ok");
+    playTransfer();
+  }catch(e){ setStatus("✗ "+e.message,"err"); }
+  await refreshState(); setBusy(false);
+}
+async function runFull(){
+  if(busy) return; await doAuthorize(); await doMint(); await new Promise(r=>setTimeout(r,600)); await doTransfer();
+  setStatus("✓ Full flow complete — two banks, two keys, settled on-chain.","ok");
+}
+
+gsap.registerPlugin(MotionPathPlugin);
+function flash(id,color){ const el=document.querySelector(id+" rect");
+  gsap.fromTo(el,{stroke:"rgba(0,0,0,.14)",strokeWidth:1},{stroke:color,strokeWidth:2.5,duration:.32,yoyo:true,repeat:1}); }
+function playMint(){
+  gsap.timeline()
+   .set("#pkA",{opacity:0})
+   .to("#haloA",{opacity:.4,attr:{r:22},duration:.3,yoyo:true,repeat:1})
+   .to("#pkA",{opacity:1,duration:.12})
+   .to("#pkA",{motionPath:{path:"#pA_tx",autoRotate:false},duration:.8}).add(()=>flash("#cTA",RED),"-=.1")
+   .to("#pkA",{motionPath:{path:"#pS1"},duration:.4}).add(()=>flash("#cRL",RED))
+   .to("#pkA",{motionPath:{path:"#pS2"},duration:.4}).add(()=>flash("#cSC",RED))
+   .to("#pkA",{motionPath:{path:"#pMint",autoRotate:false},duration:.6})
+   .to("#pkA",{opacity:0,duration:.15});
+}
+function playTransfer(){
+  gsap.timeline()
+   .set("#pkB",{opacity:0}).set("#coin",{opacity:0})
+   .to("#haloB",{opacity:.5,attr:{r:22},duration:.3,yoyo:true,repeat:1})
+   .to("#pkB",{opacity:1,duration:.12})
+   .to("#pkB",{motionPath:{path:"#pB_tx",autoRotate:false},duration:.7}).add(()=>flash("#cSC",GOLD),"-=.2")
+   .to("#pkB",{opacity:0,duration:.12})
+   .to("#coin",{opacity:1,duration:.12})
+   .to("#coin",{motionPath:{path:"#pXfer",autoRotate:false},duration:.6})
+   .to("#coin",{opacity:0,duration:.15});
+}
+
+let lastRender = "";
+async function refreshExplorer(){
+  try{
+    const blocks = await api("/api/blocks?n=12");
+    const txs = []; blocks.forEach(b=>b.txs&&b.txs.forEach(t=>txs.push(t)));
+    const feed = $("feed");
+    if(txs.length===0){ feed.innerHTML = '<div class="empty">No transactions yet — trigger an action above.</div>'; }
+    else{
+      const html = txs.slice(0,40).map(t=>{
+        const cls = ["mint","transfer","authorize"].includes(t.method)?t.method:"other";
+        const m = t.method.length>12? t.method.slice(0,10)+"…" : t.method;
+        return `<div class="tx" onclick='showTx(${JSON.stringify(t.hash)})'>
+          <span class="m ${cls}">${m}</span>
+          <span class="route">${t.from} <span class="arr">→</span> ${t.to}</span>
+          <span class="st ${t.status}" title="${t.status}"></span></div>`;
+      }).join("");
+      if(html!==lastRender){ feed.innerHTML = html; lastRender = html; }
+    }
+    $("blocks").innerHTML = blocks.map(b=>`<div class="blk"><span class="n">#${b.number}</span>
+      <span class="c"><b>${b.txCount}</b> tx${b.txCount===1?"":"s"}</span></div>`).join("");
+  }catch(e){}
+}
+const esc = s => String(s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function addrCell(label, addr){
+  if(!addr) return "—";
+  const l = (label && label!==addr) ? `<span class="lbl">${esc(label)}</span>` : "";
+  return `${l}<span class="addr">${esc(addr)}</span>`;
+}
+function ts(sec){ if(!sec) return "—"; const d=new Date(Number(sec)*1000); return d.toISOString().replace("T"," ").replace(/\.\d+Z/," UTC"); }
+function gwei(wei){ if(!wei) return "—"; return (Number(wei)/1e9).toLocaleString("en-US",{maximumFractionDigits:4})+" gwei"; }
+
+async function showTx(hash){
+  try{
+    const d = await api("/api/tx?hash="+hash);
+    $("mTitle").innerHTML = `Transaction · <span style="color:var(--wf-red)">${esc(d.method)}</span>`;
+    const paramRow = p => `<div class="prow"><span class="pn">${esc(p.name||"—")} <span class="pt">${esc(p.type)}</span></span>
+      <span></span><span class="pv">${p.label?`<span class="lbl">${esc(p.label)}</span>`:""}${esc(p.value)}${p.human?` <span class="human">= ${esc(p.human)}</span>`:""}</span></div>`;
+
+    // Overview
+    const overview = `
+      <div class="sec"><div class="sec-h">Overview</div><div class="kv">
+        <div class="k">Transaction hash</div><div class="val">${esc(d.hash)}</div>
+        <div class="k">Status</div><div class="val"><span class="pill ${d.status}">${d.status}</span></div>
+        <div class="k">Method</div><div class="val">${esc(d.method)}</div>
+        <div class="k">Block</div><div class="val">${d.block||"—"} <span class="addr">${d.blockHash?"· "+d.blockHash.slice(0,18)+"…":""}</span></div>
+        <div class="k">Timestamp</div><div class="val">${ts(d.timestamp)}</div>
+        <div class="k">From</div><div class="val">${addrCell(d.from,d.fromAddr)}</div>
+        <div class="k">To</div><div class="val">${addrCell(d.to,d.toAddr)}</div>
+        <div class="k">Value</div><div class="val">${d.value==="0"?"0 ETH":esc(d.value)+" wei"}</div>
+        <div class="k">Nonce</div><div class="val">${d.nonce}</div>
+        <div class="k">Tx type</div><div class="val">${d.txType} ${d.txType===2?"(EIP-1559)":""}</div>
+        <div class="k">Gas used / limit</div><div class="val">${(d.gasUsed||0).toLocaleString()} / ${(d.gasLimit||0).toLocaleString()}</div>
+        <div class="k">Effective gas price</div><div class="val">${gwei(d.gasPrice)}</div>
+      </div></div>`;
+
+    // Decoded input
+    const decoded = (d.decoded && d.decoded.length)
+      ? `<div class="sec"><div class="sec-h">Input · decoded (${esc(d.method)})</div><div class="params">${d.decoded.map(paramRow).join("")}</div></div>`
+      : "";
+
+    // Event logs
+    const logs = (d.logs && d.logs.length)
+      ? `<div class="sec"><div class="sec-h">Event logs (${d.logs.length})</div>${d.logs.map(l=>`
+          <div class="logrow"><div class="lh"><span class="ev">${esc(l.event)}</span> <span class="at">· emitted by ${esc(l.address)}</span></div>
+          ${l.raw?`<div class="pv">topic0 ${esc(l.topic0||"")}</div>`:`<div class="params">${(l.params||[]).map(paramRow).join("")}</div>`}</div>`).join("")}</div>`
+      : "";
+
+    // Raw input
+    const raw = `<div class="sec"><div class="sec-h">Input data · raw</div><div class="inputraw">${esc(d.input)}</div></div>`;
+
+    $("mBody").innerHTML = overview + decoded + logs + raw;
+    $("modal").classList.add("open");
+  }catch(e){ /* ignore */ }
+}
+function closeModal(){ $("modal").classList.remove("open"); }
+$("modal").addEventListener("click",e=>{ if(e.target===$("modal")) closeModal(); });
+
+$("btnAuth").onclick=doAuthorize; $("btnMint").onclick=doMint; $("btnXfer").onclick=doTransfer; $("btnRun").onclick=runFull;
+refreshState(); refreshExplorer();
+setInterval(refreshState, 3000);
+setInterval(refreshExplorer, 2500);
+</script>
+</body>
+</html>

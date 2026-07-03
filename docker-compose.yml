@@ -1,0 +1,155 @@
+# Full Docker automation for the Besu interbank deposit-token demo.
+#
+#   docker compose up --build           # chain + contracts + services + web console
+#   open http://localhost:8080          # the console (trigger flow + block explorer)
+#   docker compose --profile cli up demo   # also run the one-shot CLI scenario
+#   docker compose down -v              # tear everything down
+#
+# Bring-up order (enforced by healthchecks + depends_on):
+#   besu → deployer (writes /shared/besu.json) → routers + deposit-svcs → webui
+name: besu-interbank
+
+x-svc-image: &svc-image
+  build:
+    context: .
+    dockerfile: Dockerfile
+
+services:
+  # ── Chain ──────────────────────────────────────────────────────────────────
+  besu:
+    image: hyperledger/besu:latest
+    container_name: bi-besu
+    ports: ["8545:8545", "8546:8546"]
+    volumes:
+      - ./chain/genesis/genesis.json:/config/genesis.json:ro
+      - ./chain/node1/key:/config/key:ro
+      - besu-data:/data
+    command:
+      - --genesis-file=/config/genesis.json
+      - --node-private-key-file=/config/key
+      - --data-path=/data
+      - --min-gas-price=0
+      - --rpc-http-enabled=true
+      - --rpc-http-host=0.0.0.0
+      - --rpc-http-port=8545
+      - --rpc-http-cors-origins=*
+      - --rpc-http-api=ETH,NET,WEB3,QBFT,ADMIN,TXPOOL,DEBUG
+      - --rpc-ws-enabled=true
+      - --rpc-ws-host=0.0.0.0
+      - --rpc-ws-port=8546
+      - --host-allowlist=*
+    # The besu image ships only bash (no wget/curl), so probe the RPC port with
+    # bash's /dev/tcp — succeeds once the JSON-RPC listener is up.
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/8545'"]
+      interval: 5s
+      timeout: 4s
+      retries: 30
+      start_period: 6s
+
+  # ── One-shot contract deploy ─────────────────────────────────────────────────
+  deployer:
+    build:
+      context: .
+      dockerfile: Dockerfile.deployer
+    container_name: bi-deployer
+    depends_on:
+      besu: { condition: service_healthy }
+    environment:
+      RPC_URL: http://besu:8545
+      DEPLOYMENT_OUT: /shared/besu.json
+    volumes:
+      - deploy-shared:/shared
+    restart: "no"
+
+  # ── Signing routers (one per bank; each holds only its own key) ───────────────
+  router-a:
+    <<: *svc-image
+    container_name: bi-router-a
+    command: ["signing-router"]
+    environment: { PORT: "7401", LABEL: "Bank A router", ROUTER_KEYS: "key://bank-a/issuer" }
+    healthcheck: { test: ["CMD", "wget", "-qO-", "http://localhost:7401/health"], interval: 5s, timeout: 3s, retries: 20 }
+
+  router-b:
+    <<: *svc-image
+    container_name: bi-router-b
+    command: ["signing-router"]
+    environment: { PORT: "7402", LABEL: "Bank B router", ROUTER_KEYS: "key://bank-b/holder" }
+    healthcheck: { test: ["CMD", "wget", "-qO-", "http://localhost:7402/health"], interval: 5s, timeout: 3s, retries: 20 }
+
+  # ── Deposit-token services (never hold a key) ─────────────────────────────────
+  deposit-a:
+    <<: *svc-image
+    container_name: bi-deposit-a
+    command: ["deposit-svc"]
+    depends_on:
+      besu: { condition: service_healthy }
+      deployer: { condition: service_completed_successfully }
+      router-a: { condition: service_healthy }
+    environment:
+      BANK_ID: bank-a
+      PORT: "8401"
+      RPC_URL: http://besu:8545
+      DEPLOYMENT_JSON: /shared/besu.json
+      BANKA_SIGNING_ROUTER_URL: http://router-a:7401
+    volumes: [ "deploy-shared:/shared:ro" ]
+    healthcheck: { test: ["CMD", "wget", "-qO-", "http://localhost:8401/health"], interval: 5s, timeout: 3s, retries: 20 }
+
+  deposit-b:
+    <<: *svc-image
+    container_name: bi-deposit-b
+    command: ["deposit-svc"]
+    depends_on:
+      besu: { condition: service_healthy }
+      deployer: { condition: service_completed_successfully }
+      router-b: { condition: service_healthy }
+    environment:
+      BANK_ID: bank-b
+      PORT: "8402"
+      RPC_URL: http://besu:8545
+      DEPLOYMENT_JSON: /shared/besu.json
+      BANKB_SIGNING_ROUTER_URL: http://router-b:7402
+    volumes: [ "deploy-shared:/shared:ro" ]
+    healthcheck: { test: ["CMD", "wget", "-qO-", "http://localhost:8402/health"], interval: 5s, timeout: 3s, retries: 20 }
+
+  # ── Web console + block explorer ──────────────────────────────────────────────
+  webui:
+    <<: *svc-image
+    container_name: bi-webui
+    command: ["webui"]
+    ports: ["8080:8080"]
+    depends_on:
+      deposit-a: { condition: service_healthy }
+      deposit-b: { condition: service_healthy }
+    environment:
+      PORT: "8080"
+      RPC_URL: http://besu:8545
+      DEPLOYMENT_JSON: /shared/besu.json
+      WEBUI_STATIC: /app/webui/static
+      BANKA_DEPOSIT_URL: http://deposit-a:8401
+      BANKB_DEPOSIT_URL: http://deposit-b:8402
+    volumes: [ "deploy-shared:/shared:ro" ]
+
+  # ── Optional one-shot CLI scenario (profile: cli) ─────────────────────────────
+  demo:
+    <<: *svc-image
+    container_name: bi-demo
+    profiles: ["cli"]
+    command: ["demo"]
+    depends_on:
+      deposit-a: { condition: service_healthy }
+      deposit-b: { condition: service_healthy }
+    environment:
+      DEMO_SPAWN: "false"
+      RPC_URL: http://besu:8545
+      DEPLOYMENT_JSON: /shared/besu.json
+      BANKA_SIGNING_ROUTER_URL: http://router-a:7401
+      BANKB_SIGNING_ROUTER_URL: http://router-b:7402
+      BANKA_DEPOSIT_URL: http://deposit-a:8401
+      BANKB_DEPOSIT_URL: http://deposit-b:8402
+    volumes: [ "deploy-shared:/shared:ro" ]
+    restart: "no"
+
+volumes:
+  besu-data:
+  deploy-shared:

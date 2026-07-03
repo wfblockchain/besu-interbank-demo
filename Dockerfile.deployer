@@ -1,0 +1,13 @@
+# One-shot contract-deployer image: Foundry + the vendored contracts, with
+# soldeer deps installed at build time. On run it deploys the stack to Besu and
+# publishes besu.json to the shared volume (DEPLOYMENT_OUT).
+FROM ghcr.io/foundry-rs/foundry:stable
+# The base image runs as the non-root `foundry` user, which can't write to the
+# root-owned COPY target. Run as root for this one-shot deployer.
+USER root
+WORKDIR /contracts
+COPY contracts/ /contracts/
+RUN forge soldeer install
+ENV RPC_URL=http://besu:8545
+ENV DEPLOYMENT_OUT=/shared/besu.json
+ENTRYPOINT ["bash", "deploy-to-besu.sh"]

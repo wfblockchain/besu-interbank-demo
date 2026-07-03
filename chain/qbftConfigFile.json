@@ -1,0 +1,48 @@
+{
+  "genesis": {
+    "config": {
+      "chainId": 1337,
+      "berlinBlock": 0,
+      "londonBlock": 0,
+      "zeroBaseFee": true,
+      "qbft": {
+        "blockperiodseconds": 2,
+        "epochlength": 30000,
+        "requesttimeoutseconds": 4
+      },
+      "shanghaiTime": 0,
+      "cancunTime": 0
+    },
+    "nonce": "0x0",
+    "timestamp": "0x0",
+    "gasLimit": "0x1fffffffffffff",
+    "difficulty": "0x1",
+    "mixHash": "0x63746963616c2062797a616e74696e65206661756c7420746f6c6572616e6365",
+    "coinbase": "0x0000000000000000000000000000000000000000",
+    "alloc": {
+      "f39fd6e51aad88f6f4ce6ab8827279cfffb92266": {
+        "comment": "DEMO-ONLY Bank A (Issuer / deployer / minter) \u2014 Hardhat account #0",
+        "balance": "0x200000000000000000000000000000000000000000000000000000000000000"
+      },
+      "70997970c51812dc3a010c7d01b50e0d17dc79c8": {
+        "comment": "DEMO-ONLY Bank B (Holder) \u2014 Hardhat account #1",
+        "balance": "0x200000000000000000000000000000000000000000000000000000000000000"
+      },
+      "3c44cdddb6a900fa2b585dd299e03d12fa4293bc": {
+        "comment": "DEMO-ONLY Merchant (Bank B's counterparty) \u2014 Hardhat account #2",
+        "balance": "0x200000000000000000000000000000000000000000000000000000000000000"
+      },
+      "4e59b44847b379578588920ca78fbf26c0b4956c": {
+        "comment": "Arachnid deterministic-deployment-proxy (canonical CREATE2 factory) \u2014 pre-deployed so template proxy deploys work on a fresh chain.",
+        "balance": "0x0",
+        "code": "0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe03601600081602082378035828234f58015156039578182fd5b8082525050506014600cf3"
+      }
+    }
+  },
+  "blockchain": {
+    "nodes": {
+      "generate": true,
+      "count": 1
+    }
+  }
+}

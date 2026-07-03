@@ -1,0 +1,14 @@
+# Go build output
+/bin/
+*.log
+
+# Foundry build output
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+contracts/dependencies/
+contracts/forge-utils/
+
+# Besu generator scratch (genesis + validator key are committed under genesis/ and node1/)
+chain/networkFiles/
+chain/node1/data/

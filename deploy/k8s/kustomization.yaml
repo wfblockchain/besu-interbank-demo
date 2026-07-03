@@ -1,0 +1,38 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: besu-interbank
+
+resources:
+  - 00-namespace.yaml
+  - 10-besu.yaml
+  - 20-deployer-job.yaml
+  - 30-routers.yaml
+  - 40-deposit.yaml
+  - 50-webui.yaml
+
+# Generate the chain genesis, validator key, and the deterministic address book
+# straight from the repo files, so they stay in sync with the rest of the demo.
+configMapGenerator:
+  - name: besu-genesis
+    files:
+      - genesis.json=../../chain/genesis/genesis.json
+  - name: deployment-addresses
+    files:
+      - besu.json=../../contracts/deployments/besu.json
+
+secretGenerator:
+  - name: besu-node-key
+    files:
+      - key=../../chain/node1/key
+
+# Stable names (no content-hash suffix) so the Deployments can reference them.
+generatorOptions:
+  disableNameSuffixHash: true
+
+# DEMO-ONLY images built locally (see deploy/k8s/README.md). Point these at your
+# registry if deploying to a remote cluster.
+images:
+  - name: besu-interbank-svc
+    newTag: latest
+  - name: besu-interbank-deployer
+    newTag: latest

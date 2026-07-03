@@ -1,0 +1,38 @@
+# Web console + block explorer. Exposed via NodePort 30080 for easy access on a
+# local cluster (kind/minikube):  http://localhost:30080  (or `kubectl port-forward`).
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: webui, namespace: besu-interbank, labels: { app: webui } }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: webui } }
+  template:
+    metadata: { labels: { app: webui } }
+    spec:
+      containers:
+        - name: webui
+          image: besu-interbank-svc:latest
+          imagePullPolicy: IfNotPresent
+          command: ["webui"]
+          env:
+            - { name: PORT, value: "8080" }
+            - { name: RPC_URL, value: http://besu:8545 }
+            - { name: DEPLOYMENT_JSON, value: /config/besu.json }
+            - { name: WEBUI_STATIC, value: /app/webui/static }
+            - { name: BANKA_DEPOSIT_URL, value: http://deposit-a:8401 }
+            - { name: BANKB_DEPOSIT_URL, value: http://deposit-b:8402 }
+          ports: [ { containerPort: 8080 } ]
+          readinessProbe: { httpGet: { path: /api/state, port: 8080 }, periodSeconds: 5 }
+          volumeMounts: [ { name: addr, mountPath: /config, readOnly: true } ]
+      volumes:
+        - name: addr
+          configMap: { name: deployment-addresses }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: webui, namespace: besu-interbank }
+spec:
+  type: NodePort
+  selector: { app: webui }
+  ports:
+    - { port: 8080, targetPort: 8080, nodePort: 30080 }

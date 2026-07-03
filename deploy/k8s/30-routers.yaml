@@ -1,0 +1,57 @@
+# Signing routers — one per bank, each provisioned with ONLY its own key.
+# Bank A's router physically cannot sign for Bank B.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: router-a, namespace: besu-interbank, labels: { app: router-a } }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: router-a } }
+  template:
+    metadata: { labels: { app: router-a } }
+    spec:
+      containers:
+        - name: router
+          image: besu-interbank-svc:latest
+          imagePullPolicy: IfNotPresent
+          command: ["signing-router"]
+          env:
+            - { name: PORT, value: "7401" }
+            - { name: LABEL, value: "Bank A router" }
+            - { name: ROUTER_KEYS, value: "key://bank-a/issuer" }
+          ports: [ { containerPort: 7401 } ]
+          readinessProbe: { httpGet: { path: /health, port: 7401 }, periodSeconds: 3 }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: router-a, namespace: besu-interbank }
+spec:
+  selector: { app: router-a }
+  ports: [ { port: 7401, targetPort: 7401 } ]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: router-b, namespace: besu-interbank, labels: { app: router-b } }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: router-b } }
+  template:
+    metadata: { labels: { app: router-b } }
+    spec:
+      containers:
+        - name: router
+          image: besu-interbank-svc:latest
+          imagePullPolicy: IfNotPresent
+          command: ["signing-router"]
+          env:
+            - { name: PORT, value: "7402" }
+            - { name: LABEL, value: "Bank B router" }
+            - { name: ROUTER_KEYS, value: "key://bank-b/holder" }
+          ports: [ { containerPort: 7402 } ]
+          readinessProbe: { httpGet: { path: /health, port: 7402 }, periodSeconds: 3 }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: router-b, namespace: besu-interbank }
+spec:
+  selector: { app: router-b }
+  ports: [ { port: 7402, targetPort: 7402 } ]

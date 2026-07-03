@@ -1,0 +1,78 @@
+# Deposit-token services — build/sign/broadcast, never hold a key. They read the
+# deterministic address book from the `deployment-addresses` ConfigMap and wait
+# (initContainer) until the contracts actually have code on-chain.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: deposit-a, namespace: besu-interbank, labels: { app: deposit-a } }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: deposit-a } }
+  template:
+    metadata: { labels: { app: deposit-a } }
+    spec:
+      initContainers:
+        - name: wait-contracts
+          image: curlimages/curl:8.11.0
+          command: ["sh", "-c", "echo waiting for contracts…; until curl -sf -X POST -H 'content-type: application/json' --data '{\"jsonrpc\":\"2.0\",\"method\":\"eth_getCode\",\"params\":[\"0xA4ADE457d211c4dB066E6e37BdF865Cc06fCF368\",\"latest\"],\"id\":1}' http://besu:8545 | grep -Eq 'result\":\"0x[0-9a-fA-F]{6}'; do sleep 3; done; echo contracts ready"]
+      containers:
+        - name: deposit
+          image: besu-interbank-svc:latest
+          imagePullPolicy: IfNotPresent
+          command: ["deposit-svc"]
+          env:
+            - { name: BANK_ID, value: bank-a }
+            - { name: PORT, value: "8401" }
+            - { name: RPC_URL, value: http://besu:8545 }
+            - { name: DEPLOYMENT_JSON, value: /config/besu.json }
+            - { name: BANKA_SIGNING_ROUTER_URL, value: http://router-a:7401 }
+          ports: [ { containerPort: 8401 } ]
+          readinessProbe: { httpGet: { path: /health, port: 8401 }, periodSeconds: 3 }
+          volumeMounts: [ { name: addr, mountPath: /config, readOnly: true } ]
+      volumes:
+        - name: addr
+          configMap: { name: deployment-addresses }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: deposit-a, namespace: besu-interbank }
+spec:
+  selector: { app: deposit-a }
+  ports: [ { port: 8401, targetPort: 8401 } ]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: deposit-b, namespace: besu-interbank, labels: { app: deposit-b } }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: deposit-b } }
+  template:
+    metadata: { labels: { app: deposit-b } }
+    spec:
+      initContainers:
+        - name: wait-contracts
+          image: curlimages/curl:8.11.0
+          command: ["sh", "-c", "echo waiting for contracts…; until curl -sf -X POST -H 'content-type: application/json' --data '{\"jsonrpc\":\"2.0\",\"method\":\"eth_getCode\",\"params\":[\"0xA4ADE457d211c4dB066E6e37BdF865Cc06fCF368\",\"latest\"],\"id\":1}' http://besu:8545 | grep -Eq 'result\":\"0x[0-9a-fA-F]{6}'; do sleep 3; done; echo contracts ready"]
+      containers:
+        - name: deposit
+          image: besu-interbank-svc:latest
+          imagePullPolicy: IfNotPresent
+          command: ["deposit-svc"]
+          env:
+            - { name: BANK_ID, value: bank-b }
+            - { name: PORT, value: "8402" }
+            - { name: RPC_URL, value: http://besu:8545 }
+            - { name: DEPLOYMENT_JSON, value: /config/besu.json }
+            - { name: BANKB_SIGNING_ROUTER_URL, value: http://router-b:7402 }
+          ports: [ { containerPort: 8402 } ]
+          readinessProbe: { httpGet: { path: /health, port: 8402 }, periodSeconds: 3 }
+          volumeMounts: [ { name: addr, mountPath: /config, readOnly: true } ]
+      volumes:
+        - name: addr
+          configMap: { name: deployment-addresses }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: deposit-b, namespace: besu-interbank }
+spec:
+  selector: { app: deposit-b }
+  ports: [ { port: 8402, targetPort: 8402 } ]

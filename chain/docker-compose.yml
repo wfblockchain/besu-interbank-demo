@@ -1,0 +1,53 @@
+# Besu QBFT dev network for the interbank deposit-token demo.
+#
+# One validator node running QBFT (permissioned, ~2s block period, instant
+# finality). Genesis prefunds three DEMO-ONLY accounts (Bank A, Bank B,
+# Merchant — well-known Hardhat dev keys) so no faucet is needed.
+#
+#   docker compose -f chain/docker-compose.yml up -d
+#   RPC:  http://localhost:8545   ·   chainId 1337
+#
+# NOTE: keys and genesis here are throwaway demo material. Never reuse on a
+# real network.
+services:
+  besu:
+    image: hyperledger/besu:latest
+    container_name: besu-interbank
+    restart: unless-stopped
+    ports:
+      - "8545:8545"   # JSON-RPC HTTP
+      - "8546:8546"   # JSON-RPC WS
+    volumes:
+      - ./genesis/genesis.json:/config/genesis.json:ro
+      - ./node1/key:/config/key:ro
+      - besu-data:/data
+    command:
+      - --genesis-file=/config/genesis.json
+      - --node-private-key-file=/config/key
+      - --data-path=/data
+      - --min-gas-price=0
+      # QBFT validators (node key present in the genesis validator set) produce
+      # blocks automatically — no --miner-enabled needed on Besu 26.x.
+      - --rpc-http-enabled=true
+      - --rpc-http-host=0.0.0.0
+      - --rpc-http-port=8545
+      - --rpc-http-cors-origins=*
+      - --rpc-http-api=ETH,NET,WEB3,QBFT,ADMIN,TXPOOL,DEBUG
+      - --rpc-ws-enabled=true
+      - --rpc-ws-host=0.0.0.0
+      - --rpc-ws-port=8546
+      - --host-allowlist=*
+      - --logging=INFO
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          wget -qO- --post-data='{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'
+          --header='Content-Type: application/json' http://localhost:8545 | grep -q result
+      interval: 5s
+      timeout: 4s
+      retries: 20
+      start_period: 8s
+
+volumes:
+  besu-data:

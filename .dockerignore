@@ -1,0 +1,13 @@
+.git
+bin/
+*.log
+# Foundry build artifacts + deps (deployer reinstalls deps via soldeer)
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+contracts/forge-utils/
+contracts/dependencies/
+# Besu runtime data / generator scratch
+chain/node1/data/
+chain/networkFiles/
+besu-data/
